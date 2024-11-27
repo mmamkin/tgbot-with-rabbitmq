@@ -29,7 +29,8 @@ const (
 )
 
 type Fsm struct {
-	ChatId      int64
+	BotType     string
+	ChatId      string
 	State       int
 	PizzaSize   string
 	PaymentType string
@@ -39,10 +40,11 @@ type Action struct {
 	Message string
 }
 
-func NewFsm(chatId int64) *Fsm {
+func NewFsm(botType string, chatId string) *Fsm {
 	return &Fsm{
-		ChatId: chatId,
-		State:  stWaitForStart,
+		BotType: botType,
+		ChatId:  chatId,
+		State:   stWaitForStart,
 	}
 }
 
@@ -105,7 +107,13 @@ func (f *Fsm) Step(e Event) []Action {
 	}
 
 	if f.State != oldState {
-		log.Printf("ChatId %d, state from %v to %v", f.ChatId, oldState, f.State)
+		log.Printf(
+			"[DEBUG] botType %s, chatId %s, state from %s to %s",
+			f.BotType,
+			f.ChatId,
+			f.StateName(oldState),
+			f.StateName(f.State),
+		)
 	}
 	return actions
 }

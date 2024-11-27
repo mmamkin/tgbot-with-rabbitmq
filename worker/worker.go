@@ -8,6 +8,11 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type BotChannel struct {
+	BotType string
+	ChatId  string
+}
+
 type Worker struct {
 	cfg                 WorkerCfg
 	amqpPubConn         *amqp.Connection
@@ -15,7 +20,7 @@ type Worker struct {
 	amqpPubChannel      *amqp.Channel
 	amqpConsumerChannel *amqp.Channel
 	amqpDone            chan bool
-	chatStates          map[int64]*Fsm
+	chatStates          map[BotChannel]*Fsm
 }
 
 type WorkerCfg struct {
@@ -25,8 +30,9 @@ type WorkerCfg struct {
 	ConsumerTag string
 }
 
-type BotMessage struct {
-	ChatId  int64
+type CoreMessage struct {
+	BotType string
+	ChatId  string
 	Text    string
 	Command string
 }
@@ -47,7 +53,7 @@ func NewWorker(cfg WorkerCfg) *Worker {
 		cfg:              cfg,
 		amqpPubConn:      amqpPubConn,
 		amqpConsumerConn: amqpConsumerConn,
-		chatStates:       make(map[int64]*Fsm),
+		chatStates:       make(map[BotChannel]*Fsm),
 	}
 
 	return &worker
@@ -75,7 +81,7 @@ func (b *Worker) Start() error {
 		nil,               // arguments
 	)
 	if err != nil {
-		return fmt.Errorf("queue Consume: %w", err)
+		return fmt.Errorf("queue Consume failed: %w", err)
 	}
 	b.amqpDone = make(chan bool)
 	go b.handle(deliveries)
@@ -83,32 +89,48 @@ func (b *Worker) Start() error {
 }
 
 func (b *Worker) handle(deliveries <-chan amqp.Delivery) {
+	log.Println("[DEBUG] consumer started")
 	for d := range deliveries {
-		var msg BotMessage
-		json.Unmarshal(d.Body, &msg)
-		chatId := msg.ChatId
-		fsm, found := b.chatStates[chatId]
+		var msg CoreMessage
+		err := json.Unmarshal(d.Body, &msg)
+		if err != nil {
+			log.Printf("[ERROR] Unmarshal failed on message '%s': %s", string(d.Body), err)
+			d.Nack(false, false)
+			continue
+		}
+		log.Printf("[DEBUG] received message, botType %s, chatId %s", msg.BotType, msg.ChatId)
+		botChannel := BotChannel{
+			BotType: msg.BotType,
+			ChatId:  msg.ChatId,
+		}
+
+		fsm, found := b.chatStates[botChannel]
 		if !found {
-			fsm = NewFsm(chatId)
-			b.chatStates[chatId] = fsm
-			log.Printf("[DEBUG] fsm created for chatId %d\n", chatId)
+			fsm = NewFsm(msg.BotType, msg.ChatId)
+			b.chatStates[botChannel] = fsm
+			log.Printf(
+				"[DEBUG] fsm created for botType %s, chatId %s\n",
+				msg.BotType,
+				msg.ChatId,
+			)
 		} else {
 			log.Printf(
-				"[DEBUG] fsm found for chatId %d in state %s\n",
-				chatId,
+				"[DEBUG] fsm found for botType %s, chatId %s in state %s\n",
+				msg.BotType,
+				msg.ChatId,
 				fsm.StateName(fsm.State),
 			)
 		}
 		actions := fsm.Step(Event{Command: msg.Command, Message: msg.Text})
 		for _, action := range actions {
-			msgReply := BotMessage{
-				ChatId: msg.ChatId,
-				Text:   action.Message,
+			msgReply := CoreMessage{
+				BotType: msg.BotType,
+				ChatId:  msg.ChatId,
+				Text:    action.Message,
 			}
 			b.sendToQueue(msgReply)
 		}
 
-		log.Printf("message received: %s\n", string(d.Body))
 		d.Ack(false)
 	}
 	close(b.amqpDone)
@@ -134,7 +156,7 @@ func (b *Worker) Stop() error {
 	return nil
 }
 
-func (b *Worker) sendToQueue(msg BotMessage) error {
+func (b *Worker) sendToQueue(msg CoreMessage) error {
 	bytes, err := json.Marshal(&msg)
 	if err != nil {
 		return err
