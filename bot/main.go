@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/mmamkin/tgbot-with-rabbitmq/internal/core"
 )
 
 func main() {
@@ -15,7 +17,7 @@ func main() {
 	botToken := os.Getenv("BOT_TOKEN")
 	amqpDSN := os.Getenv("AMQP_DSN")
 
-	cfg := CoreConfig{
+	cfg := core.Config{
 		AmqpDSN:     amqpDSN,
 		SendQ:       "queue1",
 		RecvQ:       "queue2",
@@ -29,7 +31,7 @@ func main() {
 	}
 	tgBot := NewTgBot(tgBotCfg)
 
-	botCore.AddHandler(BotTypeTelegram, func(coreMsg CoreMessage) error {
+	botCore.AddHandler(BotTypeTelegram, func(coreMsg core.Message) error {
 		err := tgBot.Send(coreMsg)
 		if err != nil {
 			return fmt.Errorf("telegram Send failed: %w", err)

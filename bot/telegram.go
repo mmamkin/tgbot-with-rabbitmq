@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/mmamkin/tgbot-with-rabbitmq/internal/core"
 )
 
 const BotTypeTelegram = "telegram"
@@ -52,7 +53,7 @@ func (b *TgBot) Start() {
 			}
 			log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 
-			coreMsg := CoreMessage{
+			coreMsg := core.Message{
 				BotType: BotTypeTelegram,
 				ChatId:  strconv.FormatInt(update.FromChat().ID, 10),
 				Text:    update.Message.Text,
@@ -68,7 +69,7 @@ func (b *TgBot) Stop() {
 	<-b.done
 }
 
-func (b *TgBot) Send(coreMsg CoreMessage) error {
+func (b *TgBot) Send(coreMsg core.Message) error {
 	chatId, err := strconv.ParseInt(coreMsg.ChatId, 10, 64)
 	if err != nil {
 		return fmt.Errorf("bad ChatId: %s", coreMsg.ChatId)

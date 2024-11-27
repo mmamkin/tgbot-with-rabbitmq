@@ -5,27 +5,14 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/mmamkin/tgbot-with-rabbitmq/internal/core"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type CoreMessage struct {
-	BotType string
-	ChatId  string
-	Text    string
-	Command string
-}
-
-type CoreConfig struct {
-	SendQ       string
-	RecvQ       string
-	AmqpDSN     string
-	ConsumerTag string
-}
-
-type MessageHandlerFunc func(msg CoreMessage) error
+type MessageHandlerFunc func(msg core.Message) error
 
 type BotCore struct {
-	cfg                 CoreConfig
+	cfg                 core.Config
 	amqpPubConn         *amqp.Connection
 	amqpConsumerConn    *amqp.Connection
 	amqpPubChannel      *amqp.Channel
@@ -34,7 +21,7 @@ type BotCore struct {
 	messageHandlers     map[string]MessageHandlerFunc
 }
 
-func NewBotCore(cfg CoreConfig) *BotCore {
+func NewBotCore(cfg core.Config) *BotCore {
 	amqpPubConn, err := amqp.Dial(cfg.AmqpDSN)
 	if err != nil {
 		log.Panic(err)
@@ -98,7 +85,7 @@ func (b *BotCore) handleAmqp(deliveries <-chan amqp.Delivery) {
 }
 
 func (b *BotCore) handleDelivery(d *amqp.Delivery) error {
-	var msg CoreMessage
+	var msg core.Message
 	err := json.Unmarshal(d.Body, &msg)
 	if err != nil {
 		return fmt.Errorf("unmarshal failed: %w", err)
@@ -134,7 +121,7 @@ func (b *BotCore) Stop() error {
 	return nil
 }
 
-func (b *BotCore) SendToQueue(msg CoreMessage) error {
+func (b *BotCore) SendToQueue(msg core.Message) error {
 	bytes, err := json.Marshal(&msg)
 	if err != nil {
 		return err

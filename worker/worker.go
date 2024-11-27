@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/mmamkin/tgbot-with-rabbitmq/internal/core"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -28,13 +29,6 @@ type WorkerCfg struct {
 	RecvQ       string
 	AmqpDSN     string
 	ConsumerTag string
-}
-
-type CoreMessage struct {
-	BotType string
-	ChatId  string
-	Text    string
-	Command string
 }
 
 func NewWorker(cfg WorkerCfg) *Worker {
@@ -91,7 +85,7 @@ func (b *Worker) Start() error {
 func (b *Worker) handle(deliveries <-chan amqp.Delivery) {
 	log.Println("[DEBUG] consumer started")
 	for d := range deliveries {
-		var msg CoreMessage
+		var msg core.Message
 		err := json.Unmarshal(d.Body, &msg)
 		if err != nil {
 			log.Printf("[ERROR] Unmarshal failed on message '%s': %s", string(d.Body), err)
@@ -123,7 +117,7 @@ func (b *Worker) handle(deliveries <-chan amqp.Delivery) {
 		}
 		actions := fsm.Step(Event{Command: msg.Command, Message: msg.Text})
 		for _, action := range actions {
-			msgReply := CoreMessage{
+			msgReply := core.Message{
 				BotType: msg.BotType,
 				ChatId:  msg.ChatId,
 				Text:    action.Message,
@@ -156,7 +150,7 @@ func (b *Worker) Stop() error {
 	return nil
 }
 
-func (b *Worker) sendToQueue(msg CoreMessage) error {
+func (b *Worker) sendToQueue(msg core.Message) error {
 	bytes, err := json.Marshal(&msg)
 	if err != nil {
 		return err
